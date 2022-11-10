@@ -1,23 +1,36 @@
 mod channels_hour_and_status;
 
 
-pub fn get_channel_name_to_type_and_ip() -> HashMap<(String, u32), String>{
+use std::fs::*;
+use std::io::Read;
+use std::collections::HashMap;
 
-    let mut toreturn = HashMap::new();
 
-    for (name, ip) in read_channel_to_udp_stream("receivingstreams.txt"){
-        toreturn.insert((name, 0), ip) ;
+pub fn get_channel_name_to_stream() -> HashMap<String, String>{
+
+    let mut file = File::open("info.txt").expect("file not found");
+
+    let mut nametoip = HashMap::new();
+    
+    let mut contents = String::new();
+
+    file.read_to_string(&mut contents).expect("something went wrong reading the file");
+
+    for line in contents.lines() {
+        let mut split = line.split(",");
+        let name = split.next().unwrap();
+        let ip = split.next().unwrap();
+        
+        nametoip.insert(name.to_string(), ip.to_string());
     }
 
-    for (name, ip) in read_channel_to_udp_stream("sendingstreams.txt"){
-        toreturn.insert((name, 1), ip) ;
-    }
-
-    return toreturn;
+    return nametoip;
 }
 
 
-pub fn get_channels_and_next_commercial_time() -> Vec<(String, f32)>{
+
+
+pub fn get_channels_and_next_commercial_time() -> Vec<(String, Option<f32>)>{
     write_doc_id_to_file("1vMDw75gHpo2cN0SCyzuB2Yf3JPsEiLmEa5C6AJtDcAA", "./deleteme");
     return channels_hour_and_status::read_channels_and_next_commercial_time("./deleteme/Sheet1.html");
 }
@@ -27,15 +40,9 @@ use std::io::Cursor;
 
 fn write_doc_id_to_file(documentid: &str, path: &str){
 
-    //let documentid = "1eVeuje_V0GgfDP95Uh9QBJY7xS1BTOAtrY_yM7EgVD0";
     let url = format!( "https://docs.google.com/spreadsheets/d/{}/export?format=zip&id={}", documentid, documentid);
 
-    //println!("url {}", url);
     let resp = reqwest::blocking::get(url).unwrap();
-    // let mut out = File::create("./main.zip").unwrap();
-    // io::copy(&mut resp, &mut out).unwrap();
-
-    //unzip the file and read
 
     let archive = resp.bytes().unwrap();
 
@@ -48,48 +55,71 @@ fn write_doc_id_to_file(documentid: &str, path: &str){
 
 
 
-use std::fs::*;
-use std::io::Read;
-use std::collections::HashMap;
 
-fn read_channel_to_udp_stream( path: &str ) -> HashMap<String, String>{
+pub fn get_current_time() -> f32{
+    use chrono::Timelike;
+    let now = chrono::Local::now();
+    let hour = now.hour();
+    let minutes = now.minute();
 
-    let mut file = File::open(path).expect("file not found");
-
-    let mut nametoip = HashMap::new();
-    
-    let mut contents = String::new();
-
-    file.read_to_string(&mut contents).expect("something went wrong reading the file");
-
-    for line in contents.lines() {
-        let mut split = line.split(" ");
-        let name = split.next().unwrap();
-        let ip = split.next().unwrap();
-        
-        nametoip.insert(name.to_string(), ip.to_string());
-    }
-
-    return nametoip;
+    let time = hour as f32 + minutes as f32 / 60.0;
+    return time;
 }
 
 
-// //get the urls of the channels which want commercials played
-// pub fn get_streams_of_channels_seeking_commercials( documentid: &str ) -> Vec<(String, String)>{
-//     write_doc_id_to_file(documentid, "./deleteme");
-//     let channel_hour_and_status = channels_hour_and_status::read_channels_and_next_commercial_time( "./deleteme/Sheet1.html");//"./fetched/Sheet1.html" );
-//     let channel_to_udpstream = channel_to_udp_stream::read_channel_to_udp_stream();
-//     let mut toreturn = vec![];
-//     for (channelname, hour, status) in channel_hour_and_status{
-//         if status == true{
-//             println!( "{}, {}, {}", channelname, hour, status);
-//             //get the udp stream
-//             if let Some(udpstream) = channel_to_udpstream.get(&channelname){
-//                 println!("udpstream {}", udpstream);
-//                 let url = "udp://@".to_string() + udpstream;
-//                 toreturn.push( (channelname, url) );
-//             }
-//         }
-//     }
-//     return toreturn;
-// }
+use crate::WINDOWS;
+
+use std::process::Command;
+use std::process::Child;
+
+
+pub fn open_vlc_process( name: &str, _ip: &str ) -> Option<Child>{
+
+    let ip = "/home/jucci/Documents/videoplayback.mp4";
+
+    if WINDOWS{
+        if let Ok(childprocess) = Command::new(r#"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"#)
+        .arg(ip)
+        .stdout( std::process::Stdio::null() )
+        .spawn()
+        {
+            return Some(childprocess);
+        }
+    }
+    else{
+
+        //uncheck the setting in preferences  "resize interface to video size"
+        if let Ok(childprocess) = Command::new(r#"vlc"#)
+        .arg(ip)
+        .arg( format!(r#"--meta-title="{}""#, name) )
+        //.arg("--no-embedded-video")
+        // .arg("--no-autoscale")
+        // .arg("--no-one-instance")
+        // .arg("--height=400")
+        // .arg("--width=400")
+        // .arg("--video-x=100")
+        // .arg("--video-y=100")
+        .arg("--qt-minimal-view")
+        //.arg("--v4l2-audio-mute")
+        .stdout( std::process::Stdio::null() )
+        .stderr( std::process::Stdio::null() )
+        .spawn()
+        {
+            return Some(childprocess);
+        }
+
+
+        // .arg("--no-embedded-video")
+        // .arg("--no-autoscale")
+        // .arg("--no-one-instance")
+        // .arg("--height=600")
+        // .arg("--width=400")
+        // .arg("--video-x=800")
+        // .arg("--video-y=800")
+        // .arg("--qt-minimal-view")
+    }
+
+    return None;
+}
+
+

@@ -1,6 +1,6 @@
 #![recursion_limit="1000"]
 use yew::prelude::*;
-use serde::{Serialize,Deserialize};
+use serde::{Serialize};
 
 
 #[function_component(Root)]
@@ -17,9 +17,9 @@ fn main() {
 }
 
 
-use web_sys::HtmlTextAreaElement;
 
-use std::collections::{HashMap, HashSet};
+
+use std::collections::{HashMap};
 
 pub enum Msg{
     
@@ -29,11 +29,19 @@ pub enum Msg{
 
     //the name of the channel
     //if it's sending (0) if its receiving (1)
-    GetChannels( Vec<(String, (Option<f32>, bool), bool)>  ),
+    GetChannels( Vec<(String, Option<f32>, bool)>   ),
 
     //toggle channel
     //the name, if its the input (0) or output (1), enable or disable
     ChannelViewChange( String ),
+
+
+    GetCurrentTime,
+    SetCurrentTime(f32),
+
+ 
+    OpenPriorityStreams,
+    ToggleOpenPriorityStreams,
 
 }
 
@@ -47,8 +55,12 @@ use gloo::timers::callback::Interval;
 
 pub struct App{
 
-    channels: Vec<(String, (Option<f32>, bool), bool)>,
+    channels: Vec<(String, Option<f32>, bool)> ,
     interval: Interval,
+
+    openpriorityinterval: Option<Interval>,
+
+    currenttime: f32,
 
 }
 
@@ -60,17 +72,24 @@ impl Component for App{
 
     fn create(ctx: &Context<Self>) -> Self {
 
-        let callback = ctx.link().callback(|_| Msg::FetchChannels);
+        let fetchchannels = ctx.link().callback(|_| Msg::FetchChannels);
+        let getcurrenthour = ctx.link().callback(|_| Msg::GetCurrentTime);
 
-        let interval = Interval::new(1_000, move ||  {
-            callback.emit( () );
+        let interval = Interval::new(1_500, move ||  {
+            fetchchannels.emit( () );
+            getcurrenthour.emit( () );
+
             gloo::console::log!("tick");
         });
+
+
 
         let _props = ctx.props().clone();
         let toreturn = Self {
             channels: Vec::new(),
             interval: interval,
+            currenttime: 0.0,
+            openpriorityinterval: None,
         };
 
         toreturn
@@ -88,7 +107,7 @@ impl Component for App{
                 ctx.link().send_future(
                     async move {
                         Msg::GetChannels( 
-                            crate::server_get_request::< Vec<(String,  (Option<f32>, bool), bool)> >(  "/get_channels" ).await.unwrap()
+                            crate::server_get_request::< Vec<(String, Option<f32>, bool)>  >(  "/get_channels" ).await.unwrap()
                         )
                     }
                 );
@@ -99,6 +118,41 @@ impl Component for App{
                     async move {
                         crate::server_post_request::< String, bool >( input, "/post_channel_vlc_open" ).await.unwrap();
                         Msg::Error
+                    }
+                );
+            },
+            Msg::OpenPriorityStreams => {
+
+                ctx.link().send_future(
+                    async move {
+                        crate::server_get_request::< bool >(  "/open_priority_streams" ).await.unwrap();
+                        Msg::Error
+                    }
+                );
+
+            },
+            Msg::ToggleOpenPriorityStreams =>{
+
+                if self.openpriorityinterval.is_none(){
+                    let openpriorityinterval = ctx.link().callback(|_| Msg::OpenPriorityStreams);
+                    let interval = Interval::new(5_000, move ||  {
+                        openpriorityinterval.emit( () );
+                    });
+
+                    self.openpriorityinterval = Some(interval);
+                }
+                else{
+                    self.openpriorityinterval = None;
+                }
+
+            },
+            Msg::SetCurrentTime( time ) => {
+                self.currenttime = time - 3.7;
+            },
+            Msg::GetCurrentTime => {
+                ctx.link().send_future(
+                    async move {
+                        Msg::SetCurrentTime( crate::server_get_request::< f32 >(  "/get_current_time" ).await.unwrap() )
                     }
                 );
             },
@@ -115,7 +169,7 @@ impl Component for App{
 
     fn view(&self, ctx: &Context<Self>) -> Html{
 
-        use web_sys::HtmlInputElement;
+        
 
         let mut channeltotogglecallback= HashMap::new();
 
@@ -123,29 +177,78 @@ impl Component for App{
             let name = x.0.clone();
             channeltotogglecallback.insert( name.clone(), ctx.link().callback(move |_| Msg::ChannelViewChange( name.clone() ) ) );
         }
-        
+
+
+
+        let openprioritystyle = if self.openpriorityinterval.is_some(){
+            "background-color: green;"
+        }
+        else{
+            "background-color: white;"
+        };
+
+
+        let mut orderedchannels = self.channels.clone();
+        orderedchannels.sort_by(|(_, a_nextcommercialhour, _), (_, b_nextcommercialhour, _)| {
+
+            if a_nextcommercialhour.is_none() && b_nextcommercialhour.is_none(){
+                return std::cmp::Ordering::Equal;
+            }
+            else if a_nextcommercialhour.is_none(){
+                return std::cmp::Ordering::Greater;
+            }
+            else if b_nextcommercialhour.is_none(){
+                return std::cmp::Ordering::Less;
+            }
+
+
+            a_nextcommercialhour.partial_cmp(b_nextcommercialhour).unwrap_or(std::cmp::Ordering::Equal)
+        });
+
 
         html!{
             <>
 
                 //an array of buttons
 
-                <button onclick={ctx.link().callback(|x|{ Msg::FetchChannels })}>
+                <button onclick={ctx.link().callback(|_x|{ Msg::FetchChannels })}>
                 {"fetch channels"}
                 </button>
-                 
+                
+
+                <button style={openprioritystyle} onclick={ctx.link().callback(|_x|{ Msg::ToggleOpenPriorityStreams })}>
+                {"open priority streams"}
+                </button>
+
+
+                {format!("current time: {}", display_time(self.currenttime)   )}
+
+
+                <table>
+
+                <tr>
+                    <th>{"name"}</th>
+                    <th>{"next commercial"}</th>
+                    <th>{"VLC"}</th>
+                </tr>
 
 
                 {
-                    self.channels.iter().map(|(name, (nextcommercialhour, playnow), isopeninvlc)| {
+                    orderedchannels.iter().map(|(name, nextcommercialhour, isopeninvlc)| {
 
 
 
                         let mut style = "".to_string();
 
 
-                        if *playnow{
-                            style += "background-color: green;";
+                        if let Some(nextcommercialhour) = nextcommercialhour{
+
+                            if self.currenttime >= (nextcommercialhour - 0.25){
+                                style += "background-color: #F69A9A;";
+                            }
+                            else if (self.currenttime + 1.0) >= (nextcommercialhour - 0.25) {
+                                style += "background-color: #A4C2F4;";
+                            }
                         }
 
                         let vlcopenstyle = if *isopeninvlc{
@@ -157,18 +260,43 @@ impl Component for App{
                         let callback = channeltotogglecallback.get(name).unwrap().clone();
 
                         html!{
-                            <div style={style}>
-                                {format!( "{}   {:?}  {}", name, nextcommercialhour, isopeninvlc )}
+                            <tr style={style}>
+
+                                <td>
+                                    {format!("{}", name)}
+                                </td>
+                                <td>
+                                    {
+                                        if let Some( nextcommercialhour) = nextcommercialhour{
+                                            format!("{}", display_time(*nextcommercialhour) )
+                                        }
+                                        else{
+                                            "-".to_string()
+                                        }
+                                    }
+
+
+                                </td>
+
+                                <td>
 
                                 <button onclick={ callback } style={vlcopenstyle}>
-                                {"open in vlc"}
+                                    {"open in vlc"}
                                 </button>
 
-                                <br/>
-                            </div>
+                                </td>
+
+
+                                // {format!( "{}   {:?}  {}", name, nextcommercialhour, isopeninvlc )}
+
+
+                            </tr>
                         }
                     }).collect::<Html>()
                 }
+
+
+                </table>
 
 
             </>
@@ -177,6 +305,14 @@ impl Component for App{
 }
 
 
+
+fn display_time( time: f32 ) -> String{
+
+    let hour = time.floor() as i32;
+    let minute = ((time - hour as f32) * 60.0).round() as i32;
+
+    format!("{}.{}", hour, minute)
+}
 
 
 

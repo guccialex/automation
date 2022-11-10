@@ -1,4 +1,4 @@
-use actix_web::{get, web, App, HttpServer, Responder};
+use actix_web::{get, post, web, App, HttpServer, Responder};
 
 
 use tokio::sync::Mutex;
@@ -14,9 +14,9 @@ async fn get_channels(   data: web::Data<Mutex<VLCStreams>>  ) -> impl Responder
 
     data.lock().await.update();
 
-    data.lock().await.open_priority_streams( 4 );
+    //data.lock().await.open_priority_streams( 4 );
 
-    let mut toreturn: Vec<(String, (Option<f32>, bool), bool)> = data.lock().await.get_state();
+    let mut toreturn: Vec<(String, Option<f32>, bool)> = data.lock().await.get_state();
 
     //sort alphabetically
     toreturn.sort_by(|a, b| a.0.cmp(&b.0));
@@ -24,7 +24,27 @@ async fn get_channels(   data: web::Data<Mutex<VLCStreams>>  ) -> impl Responder
     return HttpResponse::Accepted().json(  toreturn  );
 }
 
-#[get("/post_channel_vlc_open")]
+
+#[get("/get_current_time")]
+async fn get_current_time(   _data: web::Data<Mutex<VLCStreams>>  ) -> impl Responder {
+
+
+    return HttpResponse::Accepted().json(  crate::get_current_time()  );
+}
+
+
+
+#[get("/open_priority_streams")]
+async fn open_priority_streams(   data: web::Data<Mutex<VLCStreams>>  ) -> impl Responder {
+
+    data.lock().await.update();
+
+    data.lock().await.open_priority_streams( 4 );
+
+    return HttpResponse::Accepted().json(  true  );
+}
+
+#[post("/post_channel_vlc_open")]
 async fn post_channel_vlc_open(  data: web::Data<Mutex<VLCStreams>>, streamname: web::Json<String>  ) -> impl Responder {
 
     println!("channel vlc open request: {}", streamname);
@@ -33,6 +53,8 @@ async fn post_channel_vlc_open(  data: web::Data<Mutex<VLCStreams>>, streamname:
 
     return HttpResponse::Accepted().json(  true  );
 }
+
+
 
 
 //#[actix_web::main] // or #[tokio::main]
@@ -51,6 +73,8 @@ pub async fn serve() -> std::io::Result<()> {
             //.service( get_similar )
             .service(get_channels )
             .service(post_channel_vlc_open )
+            .service(open_priority_streams )
+            .service(get_current_time )
             .service(Files::new("/", "./yew/dist/").index_file("index.html"))
             
     })
