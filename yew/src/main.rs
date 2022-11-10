@@ -1,7 +1,7 @@
 #![recursion_limit="1000"]
 use yew::prelude::*;
 use serde::{Serialize};
-
+use std::collections::{HashMap};
 
 #[function_component(Root)]
 fn root() -> Html {
@@ -10,39 +10,25 @@ fn root() -> Html {
     }
 }
 
-
 fn main() {
     console_error_panic_hook::set_once();
     yew::start_app::<Root>();
 }
 
-
-
-
-use std::collections::{HashMap};
-
 pub enum Msg{
-    
     Error,
 
     FetchChannels,
 
-    //the name of the channel
-    //if it's sending (0) if its receiving (1)
     GetChannels( Vec<(String, Option<f32>, bool)>   ),
 
-    //toggle channel
-    //the name, if its the input (0) or output (1), enable or disable
     ChannelViewChange( String ),
-
 
     GetCurrentTime,
     SetCurrentTime(f32),
 
- 
     OpenPriorityStreams,
     ToggleOpenPriorityStreams,
-
 }
 
 
@@ -50,21 +36,14 @@ pub enum Msg{
 pub struct Properties{
 }
 
-
 use gloo::timers::callback::Interval;
 
 pub struct App{
-
     channels: Vec<(String, Option<f32>, bool)> ,
     interval: Interval,
-
     openpriorityinterval: Option<Interval>,
-
     currenttime: f32,
-
 }
-
-
 
 impl Component for App{
     type Message = Msg;
@@ -81,8 +60,6 @@ impl Component for App{
 
             gloo::console::log!("tick");
         });
-
-
 
         let _props = ctx.props().clone();
         let toreturn = Self {
@@ -170,14 +147,12 @@ impl Component for App{
     fn view(&self, ctx: &Context<Self>) -> Html{
 
         
-
         let mut channeltotogglecallback= HashMap::new();
 
         for x in self.channels.clone(){
             let name = x.0.clone();
             channeltotogglecallback.insert( name.clone(), ctx.link().callback(move |_| Msg::ChannelViewChange( name.clone() ) ) );
         }
-
 
 
         let openprioritystyle = if self.openpriorityinterval.is_some(){
@@ -201,7 +176,6 @@ impl Component for App{
                 return std::cmp::Ordering::Less;
             }
 
-
             a_nextcommercialhour.partial_cmp(b_nextcommercialhour).unwrap_or(std::cmp::Ordering::Equal)
         });
 
@@ -209,20 +183,15 @@ impl Component for App{
         html!{
             <>
 
-                //an array of buttons
-
                 <button onclick={ctx.link().callback(|_x|{ Msg::FetchChannels })}>
                 {"fetch channels"}
                 </button>
-                
 
                 <button style={openprioritystyle} onclick={ctx.link().callback(|_x|{ Msg::ToggleOpenPriorityStreams })}>
                 {"open priority streams"}
                 </button>
 
-
                 {format!("current time: {}", display_time(self.currenttime)   )}
-
 
                 <table>
 
@@ -232,11 +201,8 @@ impl Component for App{
                     <th>{"VLC"}</th>
                 </tr>
 
-
                 {
                     orderedchannels.iter().map(|(name, nextcommercialhour, isopeninvlc)| {
-
-
 
                         let mut style = "".to_string();
 
@@ -286,18 +252,11 @@ impl Component for App{
 
                                 </td>
 
-
-                                // {format!( "{}   {:?}  {}", name, nextcommercialhour, isopeninvlc )}
-
-
                             </tr>
                         }
                     }).collect::<Html>()
                 }
-
-
                 </table>
-
 
             </>
         }
