@@ -285,6 +285,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
+ "shared",
  "tokio",
  "zip-extract",
 ]
@@ -1380,6 +1381,10 @@ dependencies = [
  "cpufeatures",
  "digest",
 ]
+
+[[package]]
+name = "shared"
+version = "0.1.0"
 
 [[package]]
 name = "signal-hook-registry"

@@ -1,6 +1,5 @@
 mod channels_hour_and_status;
 
-
 use std::fs::*;
 use std::io::Read;
 use std::collections::HashMap;
@@ -20,14 +19,14 @@ pub fn get_channel_name_to_stream() -> HashMap<String, String>{
         let mut split = line.split(",");
         let name = split.next().unwrap();
         let ip = split.next().unwrap();
+
+        let ip = format!("udp://@239.{}:1234", ip);
         
         nametoip.insert(name.to_string(), ip.to_string());
     }
 
     return nametoip;
 }
-
-
 
 
 pub fn get_channels_and_next_commercial_time() -> Vec<(String, Option<f32>)>{
@@ -54,8 +53,6 @@ fn write_doc_id_to_file(documentid: &str, path: &str){
 }
 
 
-
-
 pub fn get_current_time() -> f32{
     use chrono::Timelike;
     let now = chrono::Local::now();
@@ -67,17 +64,18 @@ pub fn get_current_time() -> f32{
 }
 
 
-use crate::WINDOWS;
-
 use std::process::Command;
 use std::process::Child;
 
 
-pub fn open_vlc_process( name: &str, _ip: &str ) -> Option<Child>{
+pub fn open_vlc_process( name: &str, ip: &str ) -> Option<Child>{
 
-    let ip = "/home/jucci/Documents/videoplayback.mp4";
+    println!("opening vlc for {}, ip {}", name, ip);
 
-    if WINDOWS{
+    // /home/jucci/Documents/
+    //let ip = "videoplayback.mp4";
+
+    if crate::WINDOWS{
         if let Ok(childprocess) = Command::new(r#"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"#)
         .arg(ip)
         .stdout( std::process::Stdio::null() )
@@ -95,11 +93,11 @@ pub fn open_vlc_process( name: &str, _ip: &str ) -> Option<Child>{
         //.arg("--no-embedded-video")
         // .arg("--no-autoscale")
         // .arg("--no-one-instance")
-        // .arg("--height=400")
-        // .arg("--width=400")
-        // .arg("--video-x=100")
+        //.arg("--height=600")
+        //.arg("--width=400")
+        //.arg("--video-x=100")
         // .arg("--video-y=100")
-        .arg("--qt-minimal-view")
+        //.arg("--qt-minimal-view")
         //.arg("--v4l2-audio-mute")
         .stdout( std::process::Stdio::null() )
         .stderr( std::process::Stdio::null() )
@@ -123,3 +121,39 @@ pub fn open_vlc_process( name: &str, _ip: &str ) -> Option<Child>{
 }
 
 
+
+pub fn get_priority( nametocommercial: &HashMap<String, f32>, amount: usize) -> Vec<String>{
+
+    println!("name to commercial {:?} amount {}", nametocommercial, amount);
+
+    let currenttime = get_current_time();
+    
+    let mut list = Vec::new();
+
+    let mut prioritycount = 0;
+
+    let contents = read_to_string("priority.txt").unwrap();
+
+    println!("contents {:?}", contents);
+    for channel in contents.split("\r\n"){
+
+        prioritycount += 1;
+
+        if let Some(nexthour) = nametocommercial.get(channel){
+
+            list.push( (channel, shared::get_priority_level( currenttime, *nexthour ), prioritycount) );
+        }
+    }
+
+    println!("list: {:?}", list);
+
+    //sort by priority level and then by priority count
+    list.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap().then(a.2.cmp(&b.2)));
+
+    list.truncate( amount );
+
+    println!("list: {:?}", list);
+
+    return list.into_iter().map(|x| x.0.to_string()).collect();
+
+}

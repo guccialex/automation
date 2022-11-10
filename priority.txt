@@ -22,7 +22,7 @@ HRT
 RTL Plus
 TVP
 VGN
-OSN Yahala
+OSN Yahala [SD]
 ITN
 MAF
 TLR

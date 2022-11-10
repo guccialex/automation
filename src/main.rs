@@ -76,25 +76,26 @@ impl VLCStreams{
         }
     }
 
-    
-
     pub fn open_priority_streams( &mut self, amount: u32 ){
 
-        let currenttime = get_current_time() as f32;
-        
         //get the list of priority input streams as ips
-        let mut prioritystreams = HashSet::new();
+        let prioritystreams = utils::get_priority(&self.nametocommercial, amount as usize)
+            .into_iter()
+            .filter_map(|name| {
 
-        for (channelname, nextcommercialhour) in self.nametocommercial.clone(){
-            if currenttime > nextcommercialhour {
-                if let Some(ip) = self.nametoip.get(&channelname){
-                    prioritystreams.insert(ip.clone());
+                if let Some(ip) = self.nametoip.get(&name){
+                    return Some( (name, ip.clone()) );
                 }
-            }
-        }
+                else{
+                    return None;
+                }
+            })
+            .collect::<HashMap<String, String>>();
+        
+        let priorityips = prioritystreams.iter().map(|x| x.1.clone()).collect::<HashSet<String>>();
 
         self.iptoprocess.retain(|ip, childprocess|{
-            if !prioritystreams.contains(ip){
+            if !priorityips.contains(ip){
                 childprocess.kill().unwrap();
                 false
             }
@@ -105,15 +106,12 @@ impl VLCStreams{
 
 
         //open the streams that are priority until the amount of streams is reached
-        for ip in prioritystreams{
+        for (name, ip) in prioritystreams{
             //if its not already opened
             if !self.iptoprocess.contains_key(&ip){
-                if self.iptoprocess.len() < amount as usize{
 
-                    if let Some(childprocess) = open_vlc_process( &ip, &ip ){
-                        self.iptoprocess.insert(ip, childprocess);
-                    }
-
+                if let Some(childprocess) = open_vlc_process( &name, &ip ){
+                    self.iptoprocess.insert(ip, childprocess);
                 }
             }
         }
@@ -135,7 +133,6 @@ impl VLCStreams{
             self.nametoip.insert(name, ip);
         }
 
-
         let mut exitedprocesses = Vec::new();
 
         for (ip, process) in &mut self.iptoprocess{
@@ -147,17 +144,14 @@ impl VLCStreams{
             }
         }
 
-
         for x in exitedprocesses{
             self.iptoprocess.remove(&x);
         }
-
     }
 }
 
 
 #[tokio::main]
 async fn main() {
-    
     server::serve().await.unwrap();
 }

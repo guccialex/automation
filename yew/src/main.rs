@@ -53,12 +53,12 @@ impl Component for App{
 
         let fetchchannels = ctx.link().callback(|_| Msg::FetchChannels);
         let getcurrenthour = ctx.link().callback(|_| Msg::GetCurrentTime);
+        fetchchannels.emit( () );
+        getcurrenthour.emit( () );
 
-        let interval = Interval::new(1_500, move ||  {
+        let interval = Interval::new(500, move ||  {
             fetchchannels.emit( () );
             getcurrenthour.emit( () );
-
-            gloo::console::log!("tick");
         });
 
         let _props = ctx.props().clone();
@@ -76,7 +76,6 @@ impl Component for App{
 
         match msg{
             Msg::Error => {},
-            //get the list of channels that are actively displayed
             Msg::GetChannels( channels ) => {
                 self.channels = channels;
             },
@@ -90,7 +89,6 @@ impl Component for App{
                 );
             },
             Msg::ChannelViewChange( input ) => {
-
                 ctx.link().send_future(
                     async move {
                         crate::server_post_request::< String, bool >( input, "/post_channel_vlc_open" ).await.unwrap();
@@ -99,32 +97,28 @@ impl Component for App{
                 );
             },
             Msg::OpenPriorityStreams => {
-
                 ctx.link().send_future(
                     async move {
                         crate::server_get_request::< bool >(  "/open_priority_streams" ).await.unwrap();
                         Msg::Error
                     }
                 );
-
             },
             Msg::ToggleOpenPriorityStreams =>{
-
                 if self.openpriorityinterval.is_none(){
                     let openpriorityinterval = ctx.link().callback(|_| Msg::OpenPriorityStreams);
+                    openpriorityinterval.emit( () );
                     let interval = Interval::new(5_000, move ||  {
                         openpriorityinterval.emit( () );
                     });
-
                     self.openpriorityinterval = Some(interval);
                 }
                 else{
                     self.openpriorityinterval = None;
                 }
-
             },
             Msg::SetCurrentTime( time ) => {
-                self.currenttime = time - 3.7;
+                self.currenttime = time;
             },
             Msg::GetCurrentTime => {
                 ctx.link().send_future(
@@ -133,7 +127,6 @@ impl Component for App{
                     }
                 );
             },
-
         }
 
         true
@@ -145,8 +138,6 @@ impl Component for App{
     }
 
     fn view(&self, ctx: &Context<Self>) -> Html{
-
-        
         let mut channeltotogglecallback= HashMap::new();
 
         for x in self.channels.clone(){
@@ -154,14 +145,12 @@ impl Component for App{
             channeltotogglecallback.insert( name.clone(), ctx.link().callback(move |_| Msg::ChannelViewChange( name.clone() ) ) );
         }
 
-
         let openprioritystyle = if self.openpriorityinterval.is_some(){
             "background-color: green;"
         }
         else{
             "background-color: white;"
         };
-
 
         let mut orderedchannels = self.channels.clone();
         orderedchannels.sort_by(|(_, a_nextcommercialhour, _), (_, b_nextcommercialhour, _)| {
@@ -179,10 +168,8 @@ impl Component for App{
             a_nextcommercialhour.partial_cmp(b_nextcommercialhour).unwrap_or(std::cmp::Ordering::Equal)
         });
 
-
         html!{
             <>
-
                 <button onclick={ctx.link().callback(|_x|{ Msg::FetchChannels })}>
                 {"fetch channels"}
                 </button>
@@ -209,12 +196,12 @@ impl Component for App{
 
                         if let Some(nextcommercialhour) = nextcommercialhour{
 
-                            if self.currenttime >= (nextcommercialhour - 0.25){
-                                style += "background-color: #F69A9A;";
-                            }
-                            else if (self.currenttime + 1.0) >= (nextcommercialhour - 0.25) {
-                                style += "background-color: #A4C2F4;";
-                            }
+                            match shared::get_priority_level(self.currenttime, *nextcommercialhour ){
+                                0 => style += "background-color: #F69A9A;",
+                                1 => style += "background-color: #A4C2F4;",
+                                _ => {},
+                            }                        
+
                         }
 
                         let vlcopenstyle = if *isopeninvlc{
@@ -257,7 +244,6 @@ impl Component for App{
                     }).collect::<Html>()
                 }
                 </table>
-
             </>
         }
     }
@@ -304,7 +290,6 @@ pub async fn server_post_request<I: Serialize, O: DeserializeOwned>( message: I,
 
 
 pub async fn server_get_request< O: DeserializeOwned>(path: &str ) -> Option<O>{
-
     let url = web_sys::window().unwrap().origin() + path;
 
     let future = reqwest::Client::new().get(url)

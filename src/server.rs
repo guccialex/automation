@@ -39,7 +39,7 @@ async fn open_priority_streams(   data: web::Data<Mutex<VLCStreams>>  ) -> impl 
 
     data.lock().await.update();
 
-    data.lock().await.open_priority_streams( 4 );
+    data.lock().await.open_priority_streams( 6 );
 
     return HttpResponse::Accepted().json(  true  );
 }

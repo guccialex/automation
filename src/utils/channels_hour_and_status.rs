@@ -22,9 +22,9 @@ pub fn read_channels_and_next_commercial_time(file: &str) -> Vec<(String, Option
         let name = cap[1].to_string();
         let time = cap[2].to_string();
 
-        if name.contains("hal"){
-            println!("name {}", name);
-        }
+        // if name.contains("hal"){
+        //     println!("name {}", name);
+        // }
 
 
         if let Ok(time) = time.parse::<f32>(){

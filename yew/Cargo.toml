@@ -28,3 +28,5 @@ serde = { version = "1.0.141", features = ["derive"] }
 #hex = "0.4.3"
 #rand = { version = "0.8.3", features = ["js"] }
 #structs = {path="../structs"}
+
+shared = { path = "../shared" }
