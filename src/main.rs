@@ -5,6 +5,9 @@ use std::process::Child;
 mod utils;
 mod server;
 
+mod commercials;
+pub use commercials::Commercials;
+
 pub use utils::get_current_time;
 use utils::open_vlc_process;
 
@@ -151,7 +154,44 @@ impl VLCStreams{
 }
 
 
+
+
+//a server that keeps track of the played commercials
+
+//it can also, have, when the commercial was played
+
+
+
+
+use regex::Regex;
+
+
 #[tokio::main]
 async fn main() {
+
+
+    //read the folder comm_playlists
+
+    //for each get the list of
+
+
+    
+
+    // let commercials = commercials::Commercials::new();
+
+    // println!( "{:?}", commercials.channels_to_next_commercial());
+
+
+    //let mut bbc_comm = Vec::new();
+
+    //#EVENT NOTE 08:00
+    
+
+    //println!("contents: {}", contents);
+
+
+
+
+
     server::serve().await.unwrap();
 }
