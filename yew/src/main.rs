@@ -3,6 +3,9 @@ use yew::prelude::*;
 use serde::{Serialize};
 use std::collections::{HashMap};
 
+mod uploadfile;
+
+
 #[function_component(Root)]
 fn root() -> Html {
     html! {
@@ -12,7 +15,7 @@ fn root() -> Html {
 
 fn main() {
     console_error_panic_hook::set_once();
-    yew::start_app::<Root>();
+    yew::Renderer::<Root>::new().render();
 }
 
 pub enum Msg{
@@ -115,12 +118,12 @@ impl Component for App{
         true
     }
 
-    fn changed(&mut self, ctx: &Context<Self>) -> bool {
+    fn changed(&mut self, ctx: &Context<Self>, old_props: &Self::Properties) -> bool{
         let _props = ctx.props().clone();
         false
     }
 
-    fn view(&self, ctx: &Context<Self>) -> Html{
+    fn view(&self, ctx: &Context<Self>, ) -> Html{
 
         let mut channeltotogglecallback= HashMap::new();
 

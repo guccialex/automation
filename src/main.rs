@@ -163,12 +163,43 @@ impl VLCStreams{
 
 
 
+pub struct RTVIChime{
+
+
+
+}
+
+// impl RTVIChime{
+//     pub fn new( rtvistring: &str ) -> Self{
+
+//     }
+// }
+
+
+
 use regex::Regex;
 
 
 #[tokio::main]
 async fn main() {
 
+
+    //read RTV_COM.ply and turn it into a string
+
+    let stringcontents = std::fs::read_to_string("RTV_COM.ply").unwrap();
+
+    println!("{}", stringcontents);
+
+
+    //create a regex which iterates over newlines
+    
+    let re = Regex::new(r"EVENT NOTE .....").unwrap();
+
+    for cap in re.captures_iter(&stringcontents) {
+        println!("Match at: {:?}", cap.get(0).unwrap().as_str());
+    }
+
+    panic!("done");
 
     //read the folder comm_playlists
 
