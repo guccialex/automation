@@ -1,5 +1,5 @@
 
-use std::env;
+
 use std::fs;
 use std::collections::HashMap;
 use regex::Regex;

@@ -1,84 +1,34 @@
-use actix_web::{get, post, web, App, HttpServer, Responder};
+use actix_web::{web, App, HttpServer, Responder};
 
 
 use tokio::sync::Mutex;
 use actix_files::Files;
 use actix_web::HttpResponse;
 
-use crate::{VLCStreams, Commercials};
+use crate::{ChannelsToCommercials, RTVIReminders};
 
 
 
-// #[get("/get_channels")]
-// async fn get_channels(   data: web::Data<Mutex<VLCStreams>>  ) -> impl Responder {
+async fn get_current_time(  ) -> impl Responder {
 
-//     data.lock().await.update();
-
-//     //data.lock().await.open_priority_streams( 4 );
-
-//     let mut toreturn: Vec<(String, Option<f32>, bool)> = data.lock().await.get_state();
-
-//     //sort alphabetically
-//     toreturn.sort_by(|a, b| a.0.cmp(&b.0));
-
-//     return HttpResponse::Accepted().json(  toreturn  );
-// }
-
-
-#[get("/get_current_time")]
-async fn get_current_time(    ) -> impl Responder {
-
-
-    return HttpResponse::Accepted().json(  crate::get_current_time()  );
+    let output: shared::backends::getcurrenttime::Output = crate::get_current_time();
+    return HttpResponse::Accepted().json( output );
 }
 
 
+async fn crement( data: web::Data<Mutex<ChannelsToCommercials>> , input: web::Json< shared::crementcommercials::Input  >) -> impl Responder {
 
-// #[get("/open_priority_streams")]
-// async fn open_priority_streams(   data: web::Data<Mutex<VLCStreams>>  ) -> impl Responder {
+    let input = input.0;
 
-//     data.lock().await.update();
-
-//     data.lock().await.open_priority_streams( 6 );
-
-//     return HttpResponse::Accepted().json(  true  );
-// }
-
-// #[post("/post_channel_vlc_open")]
-// async fn post_channel_vlc_open(  data: web::Data<Mutex<VLCStreams>>, streamname: web::Json<String>  ) -> impl Responder {
-
-//     println!("channel vlc open request: {}", streamname);
-
-//     data.lock().await.toggle_process( &*streamname );
-
-//     return HttpResponse::Accepted().json(  true  );
-// }
-
-#[get("/crement/{name}/{amount}")]
-async fn crement( data: web::Data<Mutex<Commercials>> , path: web::Path<(String, u32)>) -> impl Responder {
-
-    //data.lock().await.open_priority_streams( 4 );
-
-
-    if path.1 == 1{
-        data.lock().await.increment( &path.0 );
-    }
-    if path.1 == 0{
-        data.lock().await.decrement( &path.0 );
-    }
+    data.lock().await.crement( &input.0, input.1 );
 
     return HttpResponse::Accepted();
 }
 
 
+async fn get_commercials(   data: web::Data<Mutex<ChannelsToCommercials>>  ) -> impl Responder {
 
-
-#[get("/get_channels")]
-async fn get_channels(   data: web::Data<Mutex<Commercials>>  ) -> impl Responder {
-
-    //data.lock().await.open_priority_streams( 4 );
-
-    let mut toreturn: Vec<(String, Option<f32>)> = data.lock().await.channels_to_next_commercial().into_iter().collect();
+    let mut toreturn: shared::getcommercials::Output = data.lock().await.get_channels_to_current_commercial_hour();
 
     //sort alphabetically
     toreturn.sort_by(|a, b| a.0.cmp(&b.0));
@@ -88,11 +38,78 @@ async fn get_channels(   data: web::Data<Mutex<Commercials>>  ) -> impl Responde
 
 
 
+async fn rtvi_reminders(   data: web::Data<Mutex<RTVIReminders>> , input: web::Json< shared::rtvireminders::Input  > ) -> impl Responder {
+
+    
+    use shared::rtvireminders::Input;
+    use shared::rtvireminders::Output;
+
+    let output: Output = match input.0{
+
+        Input::DismissCurrentRTVIAd => {
+            data.lock().await.dismiss_current_reminder();
+            Output::None
+        },
+        Input::GetReminderTimes => {
+            let mut toreturn = data.lock().await.get_reminder_times();
+            toreturn.sort_by(|a, b| a.partial_cmp(&b).unwrap() );
+            Output::GetReminderTimes( toreturn )
+        },
+        Input::IsCurrentRTVIAd => {
+            let toreturn = data.lock().await.is_current_reminder();
+            
+            println!("is current reminder: {}", toreturn);
+            if toreturn{
+                Output::CurrentRTVIAd
+            }
+            else{   
+                Output::None
+            }
+        },
+        Input::SetRTVIPlaylistString( rtvistring ) => {
+            data.lock().await.load_rtvi_ads( &rtvistring );
+            Output::None
+        },
+    };
+
+
+    return HttpResponse::Accepted().json(  output  );
+
+}
+
+//     let mut toreturn: shared::iscurrentrtviad::Output = data.lock().await.is_current_reminder();
+
+//     return HttpResponse::Accepted().json(  toreturn  );
+// }
+
+// async fn set_rtvi_playlist_string(   data: web::Data<Mutex<RTVIReminders>> , input: web::Json< shared::setrtviplayliststring::Input  >  ) -> impl Responder {
+
+//     let input = input.0;
+
+//     data.lock().await.load_rtvi_ads( &input );
+
+//     return HttpResponse::Accepted();
+// }
+
+
+// async fn dismiss_current_rtvi_ad(   data: web::Data<Mutex<RTVIReminders>>  ) -> impl Responder {
+
+//     data.lock().await.dismiss_current_reminder();
+
+//     return HttpResponse::Accepted();
+// }
+
+
+
+
+
 
 //#[actix_web::main] // or #[tokio::main]
 pub async fn serve() -> std::io::Result<()> {
 
     let data = web::Data::new(Mutex::new(  crate::Commercials::new() ));
+
+    let reminders = web::Data::new(Mutex::new(  crate::RTVIReminders::new() ));
 
     
     println!("server starting ");
@@ -100,18 +117,21 @@ pub async fn serve() -> std::io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .app_data( data.clone() )
+            .app_data( reminders.clone() )
     
             .route("/hello", web::get().to(|| async { "Hello World!"  }))
-            //.service( get_similar )
-            .service(get_channels )
-            .service( crement )
-            // .service(post_channel_vlc_open )
-            // .service(open_priority_streams )
-             .service(get_current_time )
+
+            .service( web::resource( shared::getcurrenttime::PATH ).route( web::get().to( get_current_time)   ) )
+            .service( web::resource( shared::getcommercials::PATH ).route( web::get().to( get_commercials )   ) )
+            .service( web::resource( shared::crementcommercials::PATH ).route(web::post().to( crement )) )
+
+
+            .service( web::resource( shared::rtvireminders::PATH ).route( web::post().to( rtvi_reminders )   ) )
+
             .service(Files::new("/", "./yew/dist/").index_file("index.html"))
             
     })
-    .bind(("127.0.0.1", 7243))?
+    .bind(("0.0.0.0", 8080))?
     .run()
     .await
 }
@@ -119,3 +139,6 @@ pub async fn serve() -> std::io::Result<()> {
 
 //create a server shared between users that keeps track of the dates of the things
 
+
+// .service( web::resource( shared::backends::getexplanitoryfactors::PATH ).route(web::post().to(  get_explanitory_factors   )) )
+// .service( web::resource( shared::backends::getgenres::PATH).route( web::get().to(get_genres) ) )

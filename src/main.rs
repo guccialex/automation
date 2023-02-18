@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use std::collections::HashSet;
 
-use std::process::Child;
+
+
 mod utils;
 mod server;
 
@@ -9,220 +9,103 @@ mod commercials;
 pub use commercials::Commercials;
 
 pub use utils::get_current_time;
-use utils::open_vlc_process;
 
 
-const WINDOWS: bool = cfg!(target_os = "windows");
-
-
-pub struct VLCStreams{
-
-    //channel name to the 24 hour time of it's next commercial
-    nametocommercial: HashMap<String, f32>,
-
-    //channel name and stream type to it's ip
-    nametoip: HashMap<String, String>,
-
-    //ip to process
-    iptoprocess: HashMap<String, Child>,
+pub struct ChannelsToCommercials{
+    pub channelstocurrent: HashMap<String, usize>,
+    pub channeltocommercials: HashMap<String, Vec<f32>>,
 }
 
-
-impl VLCStreams{
-
+impl ChannelsToCommercials{
     pub fn new() -> Self{
-        let mut x = Self{
-            nametoip: HashMap::new(),
-            nametocommercial: HashMap::new(),
-            iptoprocess: HashMap::new(),
-        };
-        x.update();
-        x
+        ChannelsToCommercials{
+            channelstocurrent: HashMap::new(),
+            channeltocommercials: HashMap::new(),
+        }
     }
 
-    //get the channel name, the time of the next commercial, and if a vlc window is currently open
-    pub fn get_state(&self) -> Vec<(String, Option<f32>, bool)>{
+    pub fn load_commercials(&mut self, filestring: &str){
+        let (name, comms) = utils::get_name_and_comm_time_slots_from_file_string(filestring);
+        self.channeltocommercials.insert(name, comms);
+    }
 
-        let mut toreturn = Vec::new();
+    pub fn crement( &mut self, channel: &str, amount: i32){
+        let current = self.channelstocurrent.get_mut(channel).unwrap();
+        *current = (*current as i32 + amount) as usize;
+    }
 
-        for (name, ip) in self.nametoip.clone(){
-            let isopen = self.iptoprocess.contains_key(&ip);
+    pub fn get_channels_to_current_commercial_hour(&self) -> Vec<(String, f32)>{
 
-            if let Some(nextcommercial) = self.nametocommercial.get(&name){
+        let mut toreturn: Vec<(String, f32)> = Vec::new();
 
-                toreturn.push( (name, Some(*nextcommercial) , isopen) );
-            }
-            else{
-                toreturn.push( (name, None, isopen) );
+        for (channel, currentslot) in self.channelstocurrent.iter(){
+            if let Some(nexthour) = self.channeltocommercials.get(channel).unwrap().get(*currentslot){
+                toreturn.push( (channel.clone(), *nexthour) );
             }
         }
 
         return toreturn;
     }
 
-    pub fn toggle_process( &mut self, channelname: &str ){
-
-        let ip = self.nametoip.get(&channelname.to_string()).unwrap().clone();
-
-        if self.iptoprocess.contains_key(&ip){
-            //close the process
-            if let Some(childprocess) = self.iptoprocess.get_mut(&ip){
-                childprocess.kill().unwrap();
-                self.iptoprocess.remove(&ip);    
-            }
-
-        }else{
-            //open the process
-            if let Some(childprocess) = open_vlc_process( channelname, &ip ){
-                self.iptoprocess.insert(ip, childprocess);
-            }
-        }
-    }
-
-    pub fn open_priority_streams( &mut self, amount: u32 ){
-
-        //get the list of priority input streams as ips
-        let prioritystreams = utils::get_priority(&self.nametocommercial, amount as usize)
-            .into_iter()
-            .filter_map(|name| {
-
-                if let Some(ip) = self.nametoip.get(&name){
-                    return Some( (name, ip.clone()) );
-                }
-                else{
-                    return None;
-                }
-            })
-            .collect::<HashMap<String, String>>();
-        
-        let priorityips = prioritystreams.iter().map(|x| x.1.clone()).collect::<HashSet<String>>();
-
-        self.iptoprocess.retain(|ip, childprocess|{
-            if !priorityips.contains(ip){
-                childprocess.kill().unwrap();
-                false
-            }
-            else{
-                true
-            }
-        });
-
-
-        //open the streams that are priority until the amount of streams is reached
-        for (name, ip) in prioritystreams{
-            //if its not already opened
-            if !self.iptoprocess.contains_key(&ip){
-
-                if let Some(childprocess) = open_vlc_process( &name, &ip ){
-                    self.iptoprocess.insert(ip, childprocess);
-                }
-            }
-        }
-
-    }
-
-    pub fn update(&mut self){
-
-        self.nametocommercial = utils::get_channels_and_next_commercial_time().into_iter().filter_map(|(a,optionhour)|{ 
-            if let Some(hour) = optionhour{
-                Some( (a, hour) )
-            }
-            else{
-                None
-            }
-         }).collect();
-
-        for (name, ip) in utils::get_channel_name_to_stream(){
-            self.nametoip.insert(name, ip);
-        }
-
-        let mut exitedprocesses = Vec::new();
-
-        for (ip, process) in &mut self.iptoprocess{
-
-            match process.try_wait() {
-                Ok(Some(status)) => {println!("exited with: {status}");  exitedprocesses.push(ip.clone());},
-                Ok(None) => { /*still running*/ }
-                Err(e) => println!("error attempting to wait: {e}"),
-            }
-        }
-
-        for x in exitedprocesses{
-            self.iptoprocess.remove(&x);
-        }
-    }
-}
-
-
-
-
-//a server that keeps track of the played commercials
-
-//it can also, have, when the commercial was played
-
-
-
-
-pub struct RTVIChime{
-
-
 
 }
 
-// impl RTVIChime{
-//     pub fn new( rtvistring: &str ) -> Self{
-
-//     }
-// }
 
 
 
-use regex::Regex;
+
+pub struct RTVIReminders{
+    adtimes: Vec<f32>,
+    hoursbefore: f32,
+}
+
+impl RTVIReminders{
+    pub fn new() -> Self{
+        RTVIReminders{
+            adtimes: Vec::new(),
+            hoursbefore: 2. / 60.,
+        }
+    }
+
+    pub fn get_reminder_times(&self) -> Vec<f32>{
+        let mut toreturn = self.adtimes.clone();
+        for time in toreturn.iter_mut(){
+            *time -= self.hoursbefore;
+        }
+        return toreturn;
+    }
+
+    pub fn load_rtvi_ads( &mut self, rtvistring: &str) {
+        self.adtimes = utils::get_name_and_comm_time_slots_from_file_string(rtvistring).1;
+    }
+
+    pub fn dismiss_current_reminder(&mut self){
+        if self.is_current_reminder() {
+            self.adtimes.remove(0);
+        }
+    }
+
+    pub fn is_current_reminder(&self) -> bool{
+
+        if self.adtimes.len() == 0{
+            return false;
+        }
+
+
+        let currenttime = get_current_time();
+
+        if self.adtimes[0] <= currenttime + self.hoursbefore{
+            return true;
+        }
+        return false;
+    }
+
+}
+
 
 
 #[tokio::main]
 async fn main() {
-
-
-    //read RTV_COM.ply and turn it into a string
-
-    let stringcontents = std::fs::read_to_string("RTV_COM.ply").unwrap();
-
-    println!("{}", stringcontents);
-
-
-    //create a regex which iterates over newlines
-    
-    let re = Regex::new(r"EVENT NOTE .....").unwrap();
-
-    for cap in re.captures_iter(&stringcontents) {
-        println!("Match at: {:?}", cap.get(0).unwrap().as_str());
-    }
-
-    panic!("done");
-
-    //read the folder comm_playlists
-
-    //for each get the list of
-
-
-    
-
-    // let commercials = commercials::Commercials::new();
-
-    // println!( "{:?}", commercials.channels_to_next_commercial());
-
-
-    //let mut bbc_comm = Vec::new();
-
-    //#EVENT NOTE 08:00
-    
-
-    //println!("contents: {}", contents);
-
-
-
-
 
     server::serve().await.unwrap();
 }

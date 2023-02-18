@@ -12,11 +12,15 @@ edition = "2021"
 #yew-router = "0.16.0"
 yew = {version = "0.20.0", features = ["csr"]}
 
+wasm-bindgen = "^0.2"
+
 web-sys = "^0.3.59"
 
 reqwest = {version = "0.11.14", features = ["json"]}
 
 gloo = "^0.8"
+
+gloo-file =  {version = "0.2.3", features = ["futures"]}
 
 #bincode = "1.3.3"
 
@@ -32,3 +36,6 @@ serde = { version = "1.0.141", features = ["derive"] }
 
 shared = { path = "../shared" }
 
+tts = "0.25.0"
+
+js-sys = "0.3.61"
